@@ -25,6 +25,9 @@ xhci_ring_to_sgtable(struct xhci_sideband *sb, struct xhci_ring *ring)
 	size_t sz;
 	int i;
 
+	if(!sb->xhci)
+		return NULL;
+
 	dev = xhci_to_hcd(sb->xhci)->self.sysdev;
 	sz = ring->num_segs * TRB_SEGMENT_SIZE;
 	n_pages = PAGE_ALIGN(sz) >> PAGE_SHIFT;
@@ -158,6 +161,9 @@ xhci_sideband_remove_endpoint(struct xhci_sideband *sb,
 {
 	struct xhci_virt_ep *ep;
 	unsigned int ep_index;
+
+	if (!sb)
+		return -ENODEV;
 
 	mutex_lock(&sb->mutex);
 	ep_index = xhci_get_endpoint_index(&host_ep->desc);
@@ -403,8 +409,13 @@ EXPORT_SYMBOL_GPL(xhci_sideband_register);
 void
 xhci_sideband_unregister(struct xhci_sideband *sb)
 {
-	struct xhci_hcd *xhci = sb->xhci;
+	struct xhci_hcd *xhci;
 	int i;
+
+	if (!sb)
+		return;
+
+	xhci = sb->xhci;
 
 	mutex_lock(&sb->mutex);
 	for (i = 0; i < EP_CTX_PER_DEV; i++)

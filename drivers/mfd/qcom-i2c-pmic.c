@@ -663,6 +663,10 @@ static int i2c_pmic_probe(struct i2c_client *client)
 	enable_irq_wake(client->irq);
 
 probe_children:
+	if (client->addr == 0x9) {
+		msleep(100); //delay 100ms
+	}
+
 	of_platform_populate(chip->dev->of_node, NULL, NULL, chip->dev);
 	dev_dbg(chip->dev, "I2C PMIC probe successful\n");
 	return rc;

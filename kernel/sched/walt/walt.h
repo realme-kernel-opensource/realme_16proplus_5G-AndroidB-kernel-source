@@ -1,7 +1,7 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
  * Copyright (c) 2019-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022-2025, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  */
 
 #ifndef _WALT_H
@@ -22,6 +22,21 @@
 #include <trace/hooks/cgroup.h>
 
 #define MSEC_TO_NSEC (1000 * 1000)
+
+#if IS_ENABLED(CONFIG_OPLUS_FEATURE_SCHED_ASSIST)
+#include "../../oplus_cpu/sched/sched_assist/sa_fair.h"
+#endif
+
+#if IS_ENABLED(CONFIG_OPLUS_FEATURE_FRAME_BOOST)
+#include "../kernel/oplus_cpu/sched/frame_boost/frame_group.h"
+#endif
+
+#if IS_ENABLED(CONFIG_OPLUS_FEATURE_CPU_CLOSE_LOOP)
+extern void walt_cl_update_util_ops(
+	unsigned long (*)(int cpu, unsigned long orig, bool ed_active),
+	unsigned long (*)(int cpu, unsigned long orig, bool ed_active));
+extern void walt_trig_cpufreq_update(int cpu);
+#endif
 
 #ifdef CONFIG_HZ_300
 /*
@@ -254,6 +269,7 @@ struct walt_rq {
 	u64			old_estimated_time;
 	u64			curr_runnable_sum;
 	u64			prev_runnable_sum;
+
 	u64			nt_curr_runnable_sum;
 	u64			nt_prev_runnable_sum;
 	struct group_cpu_time	grp_time;
@@ -382,6 +398,11 @@ extern enum sched_boost_policy boost_policy;
 extern unsigned int sysctl_input_boost_ms;
 extern unsigned int sysctl_input_boost_freq[WALT_NR_CPUS];
 extern unsigned int sysctl_sched_boost_on_input;
+#if IS_ENABLED(CONFIG_OPLUS_FEATURE_CEILING_FREE)
+extern unsigned int sysctl_ceiling_free_enable;
+extern unsigned int sysctl_cb_ceiling_free_enable;
+extern unsigned int sysctl_omrg_ceiling_free_enable;
+#endif
 extern unsigned int sysctl_sched_user_hint;
 extern unsigned int sysctl_sched_conservative_pl;
 extern unsigned int sysctl_sched_hyst_min_coloc_ns;
@@ -1268,6 +1289,16 @@ static inline bool is_state1(void)
 /* determine if this task should be allowed to use a partially halted cpu */
 static inline bool task_reject_partialhalt_cpu(struct task_struct *p, int cpu)
 {
+#if IS_ENABLED(CONFIG_OPLUS_FEATURE_SCHED_ASSIST)
+	if (should_ux_task_skip_cpu(p, cpu))
+		return true;
+#endif
+
+#if IS_ENABLED(CONFIG_OPLUS_FEATURE_FRAME_BOOST)
+	if (fbg_skip_migration(p, task_cpu(p), cpu))
+		return true;
+#endif
+
 	if (p->prio < MAX_RT_PRIO)
 		return false;
 
@@ -1534,6 +1565,12 @@ extern bool move_storage_load(struct rq *rq);
 #define YIELD_SLEEP_TIME_USEC			250
 #define MAX_YIELD_SLEEP_CNT_GLOBAL_THR		(YIELD_WINDOW_SIZE_USEC /		\
 								YIELD_SLEEP_TIME_USEC / 2)
+
+/* force frequent yielder threshold */
+#define FORCE_MAX_YIELD_CNT_GLOBAL_THR_DEFAULT	500
+#define FORCE_MIN_CONTIGUOUS_YIELDING_WINDOW	2
+#define FORCE_MAX_YIELD_SLEEP_CNT_GLOBAL_THR	4
+
 /* yield boundary*/
 #define MIN_FRAME_YIELD_INTERVAL_NSEC		(1000ULL * NSEC_PER_USEC)
 #define YIELD_SLEEP_HEADROOM			300000ULL
@@ -1541,6 +1578,7 @@ extern bool move_storage_load(struct rq *rq);
 #define FRAME90_WINDOW_NSEC			11111111
 #define FRAME60_WINDOW_NSEC			16666667
 
+extern u64 frame_size_ns;
 extern u8 contiguous_yielding_windows;
 #define NUM_PIPELINE_BUSY_THRES 3
 extern unsigned int sysctl_sched_lrpb_active_ms[NUM_PIPELINE_BUSY_THRES];
